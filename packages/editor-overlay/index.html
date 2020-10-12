@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Editor</title>
+    <link rel="stylesheet" href="editor.css">
+    <script type="module" src="editor.js"></script>
+</head>
+
+<body>
+    <div id="main">
+        <div id="menu">
+            <div>BTN</div>
+        </div>
+        <div id="editor" class="editor">
+
+        </div>
+    </div>
+    <script type="module">
+        import Editor from "./editor.js";
+
+        const SVGNS = "http://www.w3.org/2000/svg";
+        const POINT_RADIUS = 3;
+
+        function createLineTracker(editor/*, svg*/) {
+
+            let isActive = false;
+            let isAxial = false;
+            let line = {x0: -1, y0: -1, x1: -1, y1: -1};
+
+            function drawLineStart(ctx) {
+                ctx.beginPath();
+                ctx.arc(line.x0, line.y0, POINT_RADIUS, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+
+            function drawLine(ctx) {
+                if (isAxial) {
+                    if (Math.abs(line.x0 - line.x1) < Math.abs(line.y0 - line.y1)) { // vertical
+                        line.x1 = line.x0;
+                    } else { // horizontal
+                        line.y1 = line.y0;
+                    }
+                }
+                ctx.beginPath();
+                ctx.moveTo(line.x0, line.y0);
+                ctx.lineTo(line.x1, line.y1);
+                ctx.stroke();
+            }
+
+            function drawLineEnd(ctx) {
+                ctx.beginPath();
+                ctx.arc(line.x1, line.y1, POINT_RADIUS, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+
+            return {
+                isActive,
+                start: e => (! editor.inAction()) && "mousedown" === e.type,
+                onStart(e) {
+                    line.x0 = e.offsetX;
+                    line.y0 = e.offsetY;
+                    isAxial = e.ctrlKey;
+                    editor.activateOverlay();
+                    drawLineStart(editor.getCtx());
+                },
+                stop: e => "mouseup" === e.type,
+                onStop: e => {
+                    editor.clearCtx();
+                    editor.deactivateOverlay();
+                    //addLine(svg, line);
+                    line = {x0: -1, y0: -1, x1: -1, y1: -1};
+                },
+                mousemove: e => {
+                    line.x1 = e.offsetX;
+                    line.y1 = e.offsetY;
+                    isAxial = e.ctrlKey;
+                    editor.clearCtx();
+                    const ctx = editor.getCtx();
+                    drawLine(ctx);
+                    drawLineStart(ctx);
+                    drawLineEnd(ctx);
+                }
+            }   
+        }
+
+        function createAndAddSvg(elem, id, viewBox) {
+            const svg = document.createElementNS(SVGNS, "svg");
+            svg.setAttribute("id", id);
+            svg.setAttribute("viewBox", viewBox);
+            svg.setAttributeNS(SVGNS, "preserveAspectRatio", "xMidYMid meet");
+            elem.appendChild(svg);
+            return svg;
+        }
+
+        function stripUnit(value) {
+            return value.slice(0, -2);
+        }
+
+        const editorNode = document.getElementById("editor");
+        const cs = window.getComputedStyle(editorNode);
+        const w = Math.floor(stripUnit(cs.width));
+        const h = Math.floor(stripUnit(cs.height));
+        //const svg = createAndAddSvg(editorNode, "svg", `0 0 ${w} ${h}`);
+        const editor = Editor(editorNode);
+        const alt = createLineTracker(editor/*, svg*/);
+        editor.addTracker(alt);
+        console.log(editor.editAction());
+
+        function addLine(svg, line) {
+            appendElem("line", svg, {
+                x1: line.x0, y1: line.y0, x2: line.x1, y2: line.y1, style: "stroke:rgb(255,0,0);stroke-width:2"
+            });
+        }
+
+        function appendElem(type, elem, attrs) {
+            const newElem = document.createElementNS(SVGNS, type);
+            for (const [key, value] of Object.entries(attrs)) {
+                newElem.setAttribute(key, value);
+            }
+            elem.appendChild(newElem);
+            return newElem;
+        }
+
+
+    </script>
+</body>
+</html>
