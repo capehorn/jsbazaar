@@ -22,8 +22,15 @@ svg {
   z-index: 100;
 } */
 
-.menu {
+#menu {
   height: var(--menu-height);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+#menu > span {
+  display: inline-block;
 }
 
 .editor {
@@ -32,6 +39,47 @@ svg {
   height: calc( (1 / var(--r)) * 100vw );
   max-width: calc( min(100vw, var(--r) * 100vh ));
   max-height: calc( min(100vh - var(--menu-height), (1 / var(--r)) * 100vw));
-  background-color: skyblue;
+  background-color: rgb(3, 89, 189);
   margin: 0 auto;
+  overflow: hidden;
+  user-select: none;
+}
+
+#select-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+}
+
+canvas.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.model {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border: 2px solid black;
+}
+
+.on {
+  color: dodgerblue;
+}
+
+.off {
+  color: gray;
 }

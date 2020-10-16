@@ -4,21 +4,26 @@
 <head>
     <meta charset="utf-8">
     <title>Editor</title>
-    <link rel="stylesheet" href="editor.css">
-    <script type="module" src="editor.js"></script>
+    <link rel="stylesheet" href="editor-overlay.css">
+    <script type="module" src="editor-overlay.js"></script>
 </head>
 
 <body>
     <div id="main">
         <div id="menu">
-            <div>BTN</div>
+            <span id="btnSelect" class="off">SELECT</span>
         </div>
         <div id="editor" class="editor">
-
+            <div id="select-layer"></div>
+            <div id="world">
+                <div class="model" style="top: 340px; left: 550px">Model A</div>
+                <div class="model">Model B</div>
+            </div>
         </div>
     </div>
     <script type="module">
-        import Editor from "./editor.js";
+        import Editor from "./editor-overlay.js";
+        import { panTracker, selectTracker, EDIT_ACTION } from "./editor-overlay.js";
 
         const SVGNS = "http://www.w3.org/2000/svg";
         const POINT_RADIUS = 3;
@@ -95,7 +100,7 @@
         }
 
         function stripUnit(value) {
-            return value.slice(0, -2);
+            return parseFloat(value.slice(0, -2));
         }
 
         const editorNode = document.getElementById("editor");
@@ -104,24 +109,24 @@
         const h = Math.floor(stripUnit(cs.height));
         //const svg = createAndAddSvg(editorNode, "svg", `0 0 ${w} ${h}`);
         const editor = Editor(editorNode);
-        const alt = createLineTracker(editor/*, svg*/);
-        editor.addTracker(alt);
-        console.log(editor.editAction());
+        editor.activateOverlay();
+        const createLineT = createLineTracker(editor/*, svg*/);
+        //editor.addTracker(createLineT);
+        editor.addTracker(panTracker(editor));
+        editor.addTracker(selectTracker(editor, ".model"));
 
-        function addLine(svg, line) {
-            appendElem("line", svg, {
-                x1: line.x0, y1: line.y0, x2: line.x1, y2: line.y1, style: "stroke:rgb(255,0,0);stroke-width:2"
-            });
-        }
-
-        function appendElem(type, elem, attrs) {
-            const newElem = document.createElementNS(SVGNS, type);
-            for (const [key, value] of Object.entries(attrs)) {
-                newElem.setAttribute(key, value);
+        document.querySelector("#btnSelect").addEventListener("click", e => {
+            const classList = e.target.classList;
+            if (classList.contains("off")) {
+                classList.remove("off")
+                classList.add("on");
+                editor.editAction(EDIT_ACTION.SELECT);
+            } else {
+                classList.add("off");
+                classList.remove("on");
+                editor.editAction(EDIT_ACTION.EMPTY);
             }
-            elem.appendChild(newElem);
-            return newElem;
-        }
+        });
 
 
     </script>
