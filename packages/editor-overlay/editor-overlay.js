@@ -9,30 +9,25 @@ const EMPTY_VA = Symbol("viewAction");
 const ZOOM = Symbol("viewAction");
 const PAN = Symbol("viewAction");
 
+const Markers = {};
 
-
-export default function Editor(elem) {
+export default function Editor(editorElem) {
+    loadMarkers();
+    const markedItems = [];
     const mouseTracker = MouseTracker();
+    const layerWorld = q("#layer-world", editorElem);
+    const layerMarker = q("#layer-marker", editorElem);
     let editAction = EDIT_ACTION.EMPTY;
     let viewAction = EMPTY_VA;
-    const world = elem.querySelector("#world");
-    const canvas = document.createElement("canvas");
+    //const canvas = document.createElement("canvas");
     
-    canvas.addEventListener("mousedown", mouseTracker.onEvent);
-    canvas.addEventListener("mousemove", mouseTracker.onEvent);
-    canvas.addEventListener("mouseup", mouseTracker.onEvent);
-    canvas.addEventListener("mouseleave", mouseTracker.onEvent);
-    canvas.addEventListener("click", mouseTracker.onEvent);
-    canvas.classList.add("overlay");
-    elem.appendChild(canvas);
-    const ctx = canvas.getContext("2d");
+    ["mousedown", "mousemove", "mouseup", "mouseleave", "click"]
+        .forEach(eType => editorElem.addEventListener(eType, mouseTracker.onEvent));
 
-    function activateOverlay() {
-        canvas.style.pointerEvents = "auto";
-    }
-    
-    function deactivateOverlay() {
-        canvas.style.pointerEvents = "none";
+    function getBoundingRect(elem) {
+        const domRect = elem.getBoundingClientRect();
+        const editorDomRect = editorElem.getBoundingClientRect();
+        return DOMRect.fromRect({x: domRect.x - editorDomRect.x, y: domRect.y - editorDomRect.y, width: domRect.width, height: domRect.height});
     }
 
     return {
@@ -41,11 +36,6 @@ export default function Editor(elem) {
         editAction: action => {
             if (action) {
                 editAction = action;
-                switch (action) {
-                    case EDIT_ACTION.SELECT: deactivateOverlay(); break;
-                    case EDIT_ACTION.EMPTY: activateOverlay(); break;
-                    default: break;
-                }
             }
             return editAction;
         },
@@ -58,37 +48,44 @@ export default function Editor(elem) {
         inViewAction: actions => actions.includes(viewAction),
         inEditAction: actions => actions.includes(editAction),
         inAction: () => (editAction != EDIT_ACTION.EMPTY) || (viewAction != EMPTY_VA),
-        activateOverlay,
-        deactivateOverlay,
-        getCtx: () => {
-            if (ctx) {
-                return ctx;
-            } else {
-                throw new Error("Context is not created yet. Be sure overlay is activated before calling this method!");
+        getElem: () => editorElem,
+        getWorldMatrix: () => getMatrix(layerWorld),
+        setWorldMatrix: matrix => layerWorld.style.transform = matrix,
+        getSelectLayer: () => layerMarker,
+        getBoundingRect,
+        markItem: (item, marker) => {
+            if ("move" === marker) {
+                const marker = Markers["move"].cloneNode(true);
+                const domRect = getBoundingRect(item);
+                const center = getCenter(domRect);
+                marker.style.top = `${center.y}px`;
+                marker.style.left = `${center.x}px`;
+                layerMarker.appendChild(marker);
+                markedItems.push([item, marker]);
             }
         },
-        clearCtx: () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.beginPath();
+        unmarkItem: (item, marker) => {
+
         },
-        getElem: () => elem,
-        getWorldMatrix: () => getMatrix(world),
-        setWorldMatrix: matrix => world.style.transform = matrix,
+        getMarkedItem: marker => {
+            const found = markedItems.find(([_, m]) => marker === m);
+            return Array.isArray(found) ? found[0] : null;
+        }
     }
 }
 
 export function panTracker(editor) {
     let isActive = false;
     let matrix = null;
-    let startPos = {x: -1, y: -1};
-    let startOffsetPos = {x: -1, y: -1};
     let startScreenPos = {x: -1, y: -1};
     return {
+        id: "pan",
         isActive,
-        start: e => editor.inViewAction([EMPTY_VA, PAN]) && "mousedown" === e.type,
+        start: e => {
+            return editor.inViewAction([EMPTY_VA, PAN]) && "mousedown" === e.type
+        },
         onStart: e => {
             editor.viewAction(PAN);
-            startOffsetPos = {x: e.offsetX, y: e.offsetY};
             startScreenPos = {x: e.screenX, y: e.screenY};
             matrix = editor.getWorldMatrix();
         },
@@ -97,7 +94,6 @@ export function panTracker(editor) {
             if (matrix != null) {
                 editor.setWorldMatrix(matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
             }
-            startPos = {x: -1, y: -1};
             startScreenPos = {x: -1, y: -1};
             matrix = null;
         },
@@ -109,26 +105,56 @@ export function panTracker(editor) {
     }
 }
 
-export function selectTracker(editor, selector) {
+export function selectTracker(editor) {
     let isActive = false;
-    if (selector) {
-        [...editor.getElem().querySelectorAll(selector)].forEach(s => s.addEventListener("click", e => {
-            console.log("target:" + e.target);
-            console.log("current target:" + e.currentTarget);
-        }));
-    }
+    let targetItem = null;
 
     return {
+        id: "select",
         isActive,
-        start: e => editor.inEditAction([EDIT_ACTION.SELECT]) && "click" === e.type,
+        start: e => "click" === e.type && !!(targetItem = fromPath(e, "model", "item")),
         onStart: e => {
-
-            //editor.click(e);
-            console.log("Clicked");
+            editor.markItem(targetItem, "move");
         },
         stop: e => true,
-        onStop: e => {
+        onStop: e => {},
+    }
+}
+
+export function moveTracker(editor) {
+    let isActive = false;
+    let targetMarker = null;
+    let matrix = null;
+    let elemToMove = null;
+    let startScreenPos = {x: -1, y: -1};
+
+
+    return {
+        id: "move",
+        isActive,
+        start: e => "mousedown" === e.type && !!(targetMarker = fromPath(e, "marker", "move")),
+        onStart: e => {
+            console.log("startMove");
+            elemToMove = editor.getMarkedItem(targetMarker);
+            console.log(elemToMove);
+            startScreenPos = {x: e.screenX, y: e.screenY};
+            matrix = getMatrix(elemToMove);
         },
+        stop: e => "mouseup" === e.type,
+        onStop: e => {
+            if (matrix != null) {
+                elemToMove.style.transform = matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
+            }
+            elemToMove = null;
+            startScreenPos = {x: -1, y: -1};
+            matrix = null;
+        },
+        mousemove: e => {
+            console.log("move");
+            if (matrix != null) {
+                elemToMove.style.transform = matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
+            }
+        }
     }
 }
 
@@ -170,7 +196,7 @@ function MouseTracker(...trackers) {
         remove(tracker) {
             TS = TS.filter(item => item !== tracker);
         },
-
+        get: trackerId => trackers.find(t => trackerId === t.id),
         onEvent(e) {
             //console.log(e.type);
             dispatch(e);
@@ -203,7 +229,6 @@ function getMatrix(elem) {
     }
 }
 
-
 function initFromArray(vs) {
     if (6 === vs.length) {
         return new DOMMatrix([
@@ -216,7 +241,54 @@ function initFromArray(vs) {
     }
 }
 
+function fromPath(e, dataAttrName, dataAttrValue) {
+    return e.composedPath().find(elem => !!elem.dataset && (dataAttrValue === elem.dataset[dataAttrName]));
+}
+
+function loadMarkers() {
+    const template = q("template#markers");
+    const clon = template.content.cloneNode(true);
+    [...clon.children].forEach(m => Markers[m.dataset.marker] = m);
+}
+
+function getCenter(domRect) {
+    return {x: domRect.left + Math.abs(domRect.right - domRect.left) / 2, y: domRect.top + Math.abs(domRect.bottom - domRect.top) / 2};
+}
+
+function toDiv(domRect) {
+    const div = document.createElement("div");
+    div.style.position = "absolute";
+    div.style.boxSizing = "border-box";
+    div.style.border = "2px solid red";
+    div.style.top = `${domRect.y}px`;
+    div.style.left = `${domRect.x}px`;
+    div.style.width = `${domRect.width}px`;
+    div.style.height = `${domRect.height}px`;
+    return div;
+}
+
+function q(selector, from = document) {
+    return from.querySelector(selector);
+}
+
+function qAll(selector, from = document) {
+    return [...from.querySelectorAll(selector)];
+}
+
 
 // const computedStyle = window.getComputedStyle(elem);
             // canvas.width = Math.floor(stripUnit(computedStyle.width));
             // canvas.height = Math.floor(stripUnit(computedStyle.height));
+
+
+            //canvas.classList.add("overlay");
+    //editorElem.appendChild(canvas);
+    //const ctx = canvas.getContext("2d");
+
+    // function activateOverlay() {
+    //     canvas.style.pointerEvents = "auto";
+    // }
+    
+    // function deactivateOverlay() {
+    //     canvas.style.pointerEvents = "none";
+    // }
