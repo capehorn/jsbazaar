@@ -19,7 +19,7 @@ export default function Editor(editorElem) {
     const layerMarker = q("#layer-marker", editorElem);
     let editAction = EDIT_ACTION.EMPTY;
     let viewAction = EMPTY_VA;
-    //const canvas = document.createElement("canvas");
+    let allowMultiMark = false;
     
     ["mousedown", "mousemove", "mouseup", "mouseleave", "click"]
         .forEach(eType => editorElem.addEventListener(eType, mouseTracker.onEvent));
@@ -28,6 +28,47 @@ export default function Editor(editorElem) {
         const domRect = elem.getBoundingClientRect();
         const editorDomRect = editorElem.getBoundingClientRect();
         return DOMRect.fromRect({x: domRect.x - editorDomRect.x, y: domRect.y - editorDomRect.y, width: domRect.width, height: domRect.height});
+    }
+
+    function markItem(item, marker) {
+        if (!allowMultiMark) {
+            unmarkAll();
+        }
+
+        if ("move" === marker) {
+            const marker = Markers["move"].cloneNode(true);
+            const domRect = getBoundingRect(item);
+            const center = getCenter(domRect);
+            marker.style.top = `${center.y}px`;
+            marker.style.left = `${center.x}px`;
+            layerMarker.appendChild(marker);
+            markedItems.push([item, marker]);
+        }
+    }
+
+    function unmarkItem(itemOrMarker) {
+        const idxToRemove = markedItems.findIndex(([i, m]) => i === itemOrMarker || m === itemOrMarker);
+        if (-1 < idxToRemove) {
+            const marker = markedItems[idxToRemove][1];
+            marker.remove();
+            markedItems.splice(idxToRemove, 1);
+        }
+    }
+
+    function unmarkAll() {
+        while (layerMarker.firstChild) {
+            layerMarker.removeChild(layerMarker.firstChild);
+        }
+        markedItems.length = 0;
+    }
+
+    function updateMarkers() {
+        markedItems.forEach(([item, marker]) => {
+            const domRect = getBoundingRect(item);
+            const center = getCenter(domRect);
+            marker.style.top = `${center.y}px`;
+            marker.style.left = `${center.x}px`;
+        });
     }
 
     return {
@@ -53,24 +94,13 @@ export default function Editor(editorElem) {
         setWorldMatrix: matrix => layerWorld.style.transform = matrix,
         getSelectLayer: () => layerMarker,
         getBoundingRect,
-        markItem: (item, marker) => {
-            if ("move" === marker) {
-                const marker = Markers["move"].cloneNode(true);
-                const domRect = getBoundingRect(item);
-                const center = getCenter(domRect);
-                marker.style.top = `${center.y}px`;
-                marker.style.left = `${center.x}px`;
-                layerMarker.appendChild(marker);
-                markedItems.push([item, marker]);
-            }
-        },
-        unmarkItem: (item, marker) => {
-
-        },
+        markItem,
+        unmarkItem,
         getMarkedItem: marker => {
             const found = markedItems.find(([_, m]) => marker === m);
             return Array.isArray(found) ? found[0] : null;
-        }
+        },
+        updateMarkers,
     }
 }
 
@@ -82,10 +112,10 @@ export function panTracker(editor) {
         id: "pan",
         isActive,
         start: e => {
-            return editor.inViewAction([EMPTY_VA, PAN]) && "mousedown" === e.type
+            return "mousedown" === e.type && (null == findInComposedPath(e, "marker"))
         },
         onStart: e => {
-            editor.viewAction(PAN);
+            console.log("pan");
             startScreenPos = {x: e.screenX, y: e.screenY};
             matrix = editor.getWorldMatrix();
         },
@@ -93,6 +123,7 @@ export function panTracker(editor) {
         onStop: e => {
             if (matrix != null) {
                 editor.setWorldMatrix(matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
+                editor.updateMarkers();
             }
             startScreenPos = {x: -1, y: -1};
             matrix = null;
@@ -100,6 +131,7 @@ export function panTracker(editor) {
         mousemove: e => {
             if (matrix != null) {
                 editor.setWorldMatrix(matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
+                editor.updateMarkers();
             }
         }
     }
@@ -112,7 +144,7 @@ export function selectTracker(editor) {
     return {
         id: "select",
         isActive,
-        start: e => "click" === e.type && !!(targetItem = fromPath(e, "model", "item")),
+        start: e => "click" === e.type && !!(targetItem = findInComposedPath(e, "model", "item")),
         onStart: e => {
             editor.markItem(targetItem, "move");
         },
@@ -123,36 +155,44 @@ export function selectTracker(editor) {
 
 export function moveTracker(editor) {
     let isActive = false;
-    let targetMarker = null;
+    let marker = null;
+    let markerMatrix = null;
     let matrix = null;
     let elemToMove = null;
     let startScreenPos = {x: -1, y: -1};
 
-
     return {
         id: "move",
         isActive,
-        start: e => "mousedown" === e.type && !!(targetMarker = fromPath(e, "marker", "move")),
+        start: e => "mousedown" === e.type && !!(marker = findInComposedPath(e, "marker", "move")),
         onStart: e => {
             console.log("startMove");
-            elemToMove = editor.getMarkedItem(targetMarker);
+            elemToMove = editor.getMarkedItem(marker);
             console.log(elemToMove);
             startScreenPos = {x: e.screenX, y: e.screenY};
             matrix = getMatrix(elemToMove);
+            markerMatrix = getMatrix(marker);
         },
         stop: e => "mouseup" === e.type,
         onStop: e => {
             if (matrix != null) {
                 elemToMove.style.transform = matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
             }
+            if (markerMatrix != null) {
+                marker.style.transform = markerMatrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
+            }
             elemToMove = null;
             startScreenPos = {x: -1, y: -1};
             matrix = null;
+            markerMatrix = null;
         },
         mousemove: e => {
             console.log("move");
             if (matrix != null) {
                 elemToMove.style.transform = matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
+            }
+            if (markerMatrix != null) {
+                marker.style.transform = markerMatrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
             }
         }
     }
@@ -241,8 +281,9 @@ function initFromArray(vs) {
     }
 }
 
-function fromPath(e, dataAttrName, dataAttrValue) {
-    return e.composedPath().find(elem => !!elem.dataset && (dataAttrValue === elem.dataset[dataAttrName]));
+function findInComposedPath(e, dataAttrName, dataAttrValue = null) {
+    return e.composedPath().find(elem => !!elem.dataset && 
+        (dataAttrValue == null ? elem.dataset[dataAttrName] != null :  dataAttrValue === elem.dataset[dataAttrName]));
 }
 
 function loadMarkers() {
