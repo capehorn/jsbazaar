@@ -16,13 +16,19 @@
         </div>
         <div id="editor" class="editor">
             <div id="layer-world" data-layer="world">
-                <div class="model" data-model="item" style="top: 340px; left: 550px">Model A</div>
-                <div class="model" data-model="item">Model B</div>
+                <div class="model" data-model="item" data-react="select" style="top: 340px; left: 550px">Model A</div>
+                <div class="model" data-model="item" data-react="select">Model B</div>
             </div>
             <div id="layer-marker" data-layer="marker"></div>
         </div>
     </div>
 
+    <template id="model-items">
+        <div class="wall" data-model="wall"></div>
+        <div class="door" data-model="door"></div>
+        <div class="window" data-model="window"></div>
+        <div class="rect" data-model="rect"></div>
+    </template>
     <template id="markers">
         <div class="edit-marker" data-marker="move">
             <i class="material-icons rot-45">zoom_out_map</i>

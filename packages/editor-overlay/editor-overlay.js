@@ -1,4 +1,4 @@
-const IDM = new DOMMatrix([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+
 
 export const EDIT_ACTION = {
     EMPTY: Symbol("editAction"),
@@ -9,10 +9,11 @@ const EMPTY_VA = Symbol("viewAction");
 const ZOOM = Symbol("viewAction");
 const PAN = Symbol("viewAction");
 
-const Markers = {};
-
 export default function Editor(editorElem) {
-    loadMarkers();
+    const Markers = loadFromTemplate("template#markers", "marker");
+    const Items = loadFromTemplate("template#model-items", "model");
+    //camera matrix
+    const CM = new DOMMatrix();
     const markedItems = [];
     const mouseTracker = MouseTracker();
     const layerWorld = q("#layer-world", editorElem);
@@ -39,9 +40,8 @@ export default function Editor(editorElem) {
             const marker = Markers["move"].cloneNode(true);
             const domRect = getBoundingRect(item);
             const center = getCenter(domRect);
-            marker.style.top = `${center.y}px`;
-            marker.style.left = `${center.x}px`;
             layerMarker.appendChild(marker);
+            setMarkerTransform(marker, `translate(${center.x}px, ${center.y}px)`);
             markedItems.push([item, marker]);
         }
     }
@@ -66,12 +66,31 @@ export default function Editor(editorElem) {
         markedItems.forEach(([item, marker]) => {
             const domRect = getBoundingRect(item);
             const center = getCenter(domRect);
-            marker.style.top = `${center.y}px`;
-            marker.style.left = `${center.x}px`;
+            setMarkerTransform(marker, `translate(${center.x}px, ${center.y}px)`);
+        });  
+    }
+
+    function setWorldMatrix(matrix) {
+        layerWorld.style.transform = matrix;
+    }
+
+    function setCameraMatrix(matrix) {
+        setFromMatrix(matrix, CM);
+    }
+
+    function addModelItems(items) {
+        items.forEach(item => {
+            const node = Items[item.type].cloneNode(true);
+            node.style.transform = new DOMMatrix().setMatrixValue(`translate(${item.x}px, ${item.y}px)`).preMultiplySelf(CM);
+            if (item.data) {
+                Object.entries(item.data).forEach(([k, v]) => node.dataset[k] = v);
+            }
+            layerWorld.appendChild(node);
         });
     }
 
     return {
+        addModelItems,
         addTracker: mouseTracker.add,
         removeTracker: mouseTracker.remove,
         editAction: action => {
@@ -91,7 +110,9 @@ export default function Editor(editorElem) {
         inAction: () => (editAction != EDIT_ACTION.EMPTY) || (viewAction != EMPTY_VA),
         getElem: () => editorElem,
         getWorldMatrix: () => getMatrix(layerWorld),
-        setWorldMatrix: matrix => layerWorld.style.transform = matrix,
+        setWorldMatrix,
+        initWorldMatrix: transform => setWorldMatrix(new DOMMatrix().setMatrixValue(transform)),
+        initCameraMatrix: transform => setCameraMatrix(new DOMMatrix().setMatrixValue(transform)),
         getSelectLayer: () => layerMarker,
         getBoundingRect,
         markItem,
@@ -144,7 +165,7 @@ export function selectTracker(editor) {
     return {
         id: "select",
         isActive,
-        start: e => "click" === e.type && !!(targetItem = findInComposedPath(e, "model", "item")),
+        start: e => "click" === e.type && !!(targetItem = findInComposedPath(e, "react", "select")),
         onStart: e => {
             editor.markItem(targetItem, "move");
         },
@@ -168,7 +189,6 @@ export function moveTracker(editor) {
         onStart: e => {
             console.log("startMove");
             elemToMove = editor.getMarkedItem(marker);
-            console.log(elemToMove);
             startScreenPos = {x: e.screenX, y: e.screenY};
             matrix = getMatrix(elemToMove);
             markerMatrix = getMatrix(marker);
@@ -185,9 +205,9 @@ export function moveTracker(editor) {
             startScreenPos = {x: -1, y: -1};
             matrix = null;
             markerMatrix = null;
+            marker = null;
         },
         mousemove: e => {
-            console.log("move");
             if (matrix != null) {
                 elemToMove.style.transform = matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
             }
@@ -226,7 +246,6 @@ function MouseTracker(...trackers) {
     }
 
     return {
-
         add(tracker) {
             if (!TS.includes(tracker)) {
                 TS.push(tracker);
@@ -255,18 +274,32 @@ function MouseTracker(...trackers) {
     };
 }
 
+function getComputedStyle(elem) {
+    return window.getComputedStyle(elem);
+}
+
 function extractNum(value) {
     return parseFloat(value.slice(0, -2));
 }
 
+function stripUnit(value) {
+    return value.slice(0, -2);
+}
+
 function getMatrix(elem) {
-    const transform = window.getComputedStyle(elem).transform;
-    if (transform === "none") {
-        return DOMMatrix.fromMatrix(IDM);
+    const transform = getComputedStyle(elem).transform;
+    if (transform === "none" || transform === undefined || transform === null || transform === "") {
+        return new DOMMatrix();
     } else {
         const matrixValues = transform.split('(')[1].split(')')[0].split(', ');
         return initFromArray(matrixValues);
     }
+}
+
+function setMarkerTransform(marker, transformString) {
+    const cs = window.getComputedStyle(marker);
+    marker.style.transform = getMatrix(marker)
+        .setMatrixValue(transformString + ` translate(${-1 * extractNum(cs.width)/2}px, ${-1 * extractNum(cs.height)/2}px)`);
 }
 
 function initFromArray(vs) {
@@ -286,10 +319,12 @@ function findInComposedPath(e, dataAttrName, dataAttrValue = null) {
         (dataAttrValue == null ? elem.dataset[dataAttrName] != null :  dataAttrValue === elem.dataset[dataAttrName]));
 }
 
-function loadMarkers() {
-    const template = q("template#markers");
+function loadFromTemplate(selector, dataAttrName) {
+    const items = {};
+    const template = q(selector);
     const clon = template.content.cloneNode(true);
-    [...clon.children].forEach(m => Markers[m.dataset.marker] = m);
+    [...clon.children].forEach(item => items[item.dataset[dataAttrName]] = item);
+    return items;
 }
 
 function getCenter(domRect) {
@@ -316,20 +351,7 @@ function qAll(selector, from = document) {
     return [...from.querySelectorAll(selector)];
 }
 
-
-// const computedStyle = window.getComputedStyle(elem);
-            // canvas.width = Math.floor(stripUnit(computedStyle.width));
-            // canvas.height = Math.floor(stripUnit(computedStyle.height));
-
-
-            //canvas.classList.add("overlay");
-    //editorElem.appendChild(canvas);
-    //const ctx = canvas.getContext("2d");
-
-    // function activateOverlay() {
-    //     canvas.style.pointerEvents = "auto";
-    // }
-    
-    // function deactivateOverlay() {
-    //     canvas.style.pointerEvents = "none";
-    // }
+function setFromMatrix(src, dest) {
+    ["m11", "m12", "m13", "m14", "m21", "m22", "m23", "m24", "m31", "m32", "m33", "m34", "m41", "m42", "m43", "m44"]
+    .forEach(v => dest[v] = src[v]);
+}

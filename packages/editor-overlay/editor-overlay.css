@@ -91,9 +91,17 @@ canvas.overlay {
 .edit-marker {
   position: absolute;
   font-size: 16px;
-  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rot-45 {
   transform: rotate(45deg);
+}
+
+.rect {
+  width: 100px;
+  height: 100px;
+  border: 1px solid gray;
 }
