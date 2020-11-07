@@ -1,5 +1,5 @@
 import Editor from "./editor-overlay.js";
-import { panTracker, selectTracker, moveTracker, EDIT_ACTION } from "./editor-overlay.js";
+import { panTracker, selectTracker, moveTracker, zoomTracker, posTracker, EDIT_ACTION } from "./editor-overlay.js";
 
 
 function stripUnit(value) {
@@ -27,6 +27,19 @@ editor.addModelItems(model.items);
 editor.addTracker(panTracker(editor));
 editor.addTracker(selectTracker(editor));
 editor.addTracker(moveTracker(editor));
+editor.addTracker(zoomTracker(editor));
+editor.addTracker(posTracker(editor, {
+  mousemove: e => {
+    const point = {x: e.screenX, y: e.screenY};
+    const editorPoint = editor.getEditorPoint(point);
+    document.querySelector("#ex").textContent = round(editorPoint.x, 2);
+    document.querySelector("#ey").textContent = round(editorPoint.y, 2);
+
+    const worldPoint = editor.getWorldPoint(point);
+    document.querySelector("#wx").textContent = round(worldPoint.x, 2);
+    document.querySelector("#wy").textContent = round(worldPoint.y, 2);
+  }
+}));
 
 document.querySelector("#btnSelect").addEventListener("click", e => {
     const classList = e.target.classList;
@@ -40,6 +53,10 @@ document.querySelector("#btnSelect").addEventListener("click", e => {
         editor.editAction(EDIT_ACTION.EMPTY);
     }
 });
+
+function round(value, decimals) {
+  return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
+}
 
 //const createLineT = createLineTracker(editor/*, svg*/);
 //editor.addTracker(createLineT);

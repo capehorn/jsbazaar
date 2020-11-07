@@ -14,15 +14,16 @@ export default function Editor(editorElem) {
     const Items = loadFromTemplate("template#model-items", "model");
     //camera matrix
     const CM = new DOMMatrix();
+    const WM = new DOMMatrix();
     const markedItems = [];
     const mouseTracker = MouseTracker();
-    const layerWorld = q("#layer-world", editorElem);
-    const layerMarker = q("#layer-marker", editorElem);
+    const worldLayer = q("#layer-world", editorElem);
+    const markerLayer = q("#layer-marker", editorElem);
     let editAction = EDIT_ACTION.EMPTY;
     let viewAction = EMPTY_VA;
     let allowMultiMark = false;
     
-    ["mousedown", "mousemove", "mouseup", "mouseleave", "click"]
+    ["mousedown", "mousemove", "mouseup", "mouseenter", "mouseleave", "click", "wheel"]
         .forEach(eType => editorElem.addEventListener(eType, mouseTracker.onEvent));
 
     function getBoundingRect(elem) {
@@ -40,7 +41,7 @@ export default function Editor(editorElem) {
             const marker = Markers["move"].cloneNode(true);
             const domRect = getBoundingRect(item);
             const center = getCenter(domRect);
-            layerMarker.appendChild(marker);
+            markerLayer.appendChild(marker);
             setMarkerTransform(marker, `translate(${center.x}px, ${center.y}px)`);
             markedItems.push([item, marker]);
         }
@@ -56,8 +57,8 @@ export default function Editor(editorElem) {
     }
 
     function unmarkAll() {
-        while (layerMarker.firstChild) {
-            layerMarker.removeChild(layerMarker.firstChild);
+        while (markerLayer.firstChild) {
+            markerLayer.removeChild(markerLayer.firstChild);
         }
         markedItems.length = 0;
     }
@@ -71,22 +72,37 @@ export default function Editor(editorElem) {
     }
 
     function setWorldMatrix(matrix) {
-        layerWorld.style.transform = matrix;
+        setFromMatrix(matrix, WM);
     }
 
-    function setCameraMatrix(matrix) {
+    function applyCameraMatrix(matrix) {
         setFromMatrix(matrix, CM);
+        worldLayer.style.transform = CM.multiply(WM);
+    }
+
+    function getWorldLayerMatrix(){
+        return getMatrix(worldLayer);
     }
 
     function addModelItems(items) {
+        const LM = getWorldLayerMatrix();
         items.forEach(item => {
             const node = Items[item.type].cloneNode(true);
-            node.style.transform = new DOMMatrix().setMatrixValue(`translate(${item.x}px, ${item.y}px)`).preMultiplySelf(CM);
+            node.style.transform = new DOMMatrix().setMatrixValue(`translate(${item.x}px, ${item.y}px)`).preMultiplySelf(LM);
             if (item.data) {
                 Object.entries(item.data).forEach(([k, v]) => node.dataset[k] = v);
             }
-            layerWorld.appendChild(node);
+            worldLayer.appendChild(node);
         });
+    }
+
+    function getEditorPoint(screenPoint) {
+        const editorDomRect = editorElem.getBoundingClientRect();
+        return new DOMPointReadOnly(screenPoint.x - editorDomRect.x, screenPoint.y - editorDomRect.y);
+    }
+
+    function getWorldPoint(screenPoint) {
+        return CM.multiply(WM).transformPoint(getEditorPoint(screenPoint));
     }
 
     return {
@@ -109,11 +125,13 @@ export default function Editor(editorElem) {
         inEditAction: actions => actions.includes(editAction),
         inAction: () => (editAction != EDIT_ACTION.EMPTY) || (viewAction != EMPTY_VA),
         getElem: () => editorElem,
-        getWorldMatrix: () => getMatrix(layerWorld),
+        getWorldLayerMatrix,
         setWorldMatrix,
         initWorldMatrix: transform => setWorldMatrix(new DOMMatrix().setMatrixValue(transform)),
-        initCameraMatrix: transform => setCameraMatrix(new DOMMatrix().setMatrixValue(transform)),
-        getSelectLayer: () => layerMarker,
+        initCameraMatrix: transform => applyCameraMatrix(new DOMMatrix().setMatrixValue(transform)),
+        getCameraMatrix: () => DOMMatrix.fromMatrix(CM),
+        applyCameraMatrix,
+        getSelectLayer: () => markerLayer,
         getBoundingRect,
         markItem,
         unmarkItem,
@@ -122,12 +140,27 @@ export default function Editor(editorElem) {
             return Array.isArray(found) ? found[0] : null;
         },
         updateMarkers,
+        getWorldPoint,
+        getEditorPoint,
+    }
+}
+
+export function posTracker(editor, override) {
+    let isActive = false;
+    return {
+        id: "pos",
+        isActive,
+        start: e => "mousemove" === e.type,
+        onStart: e => {},
+        stop: e => "mouseleave" === e.type,
+        onStop: e => {},
+        ...override
     }
 }
 
 export function panTracker(editor) {
     let isActive = false;
-    let matrix = null;
+    let cm = null;
     let startScreenPos = {x: -1, y: -1};
     return {
         id: "pan",
@@ -138,20 +171,20 @@ export function panTracker(editor) {
         onStart: e => {
             console.log("pan");
             startScreenPos = {x: e.screenX, y: e.screenY};
-            matrix = editor.getWorldMatrix();
+            cm = editor.getCameraMatrix();
         },
         stop: e => "mouseup" === e.type || "mouseleave" === e.type,
         onStop: e => {
-            if (matrix != null) {
-                editor.setWorldMatrix(matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
+            if (cm != null) {
+                editor.applyCameraMatrix(cm.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
                 editor.updateMarkers();
             }
             startScreenPos = {x: -1, y: -1};
-            matrix = null;
+            cm = null;
         },
         mousemove: e => {
-            if (matrix != null) {
-                editor.setWorldMatrix(matrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
+            if (cm != null) {
+                editor.applyCameraMatrix(cm.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0));
                 editor.updateMarkers();
             }
         }
@@ -214,6 +247,34 @@ export function moveTracker(editor) {
             if (markerMatrix != null) {
                 marker.style.transform = markerMatrix.translate(e.screenX - startScreenPos.x, e.screenY - startScreenPos.y, 0);
             }
+        }
+    }
+}
+
+export function zoomTracker(editor) {
+    let isActive = false;
+    let cm = null;
+    let startScreenPos = {x: -1, y: -1};
+    return {
+        id: "zoom",
+        isActive,
+        start: e => "wheel" === e.type,
+        onStart: e => {
+            console.log("zoom");
+            startScreenPos = {x: e.screenX, y: e.screenY};
+            cm = editor.getCameraMatrix();
+        },
+        stop: e => true,
+        onStop: e => {
+            if (cm != null) {
+                const worldPoint = editor.getWorldPoint(startScreenPos);
+                console.log(worldPoint);
+                const sign = Math.sign(e.deltaY);
+                const ratio = 1 + (sign * 0.5);
+                editor.applyCameraMatrix(cm.scale(ratio, ratio, 1, worldPoint.x, worldPoint.y, 0));
+            }
+            startScreenPos = {x: -1, y: -1};
+            cm = null;
         }
     }
 }
