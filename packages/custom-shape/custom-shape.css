@@ -1,0 +1,50 @@
+* {
+    margin: 0;
+    padding: 0;
+    transform-style: preserve-3d;
+    backface-visibility: none;
+    box-sizing: border-box;
+}
+    
+body {
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    font-family: sans-serif;
+    color: rgba(0,0,0,0.3);
+}
+
+#main {
+    width: 100%;
+    height: 100vh;
+    perspective: 1200px;
+}
+
+#origo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+}
+
+.ref {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+}
+
+.face {
+    position: absolute;
+    background-color:rgba(131, 136, 165, 0.37);
+}
+
+.edge {
+    position: absolute;
+    height: 2px;
+    transform-origin: top left;
+    /*border-top: 4px solid red;*/
+    box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.89);
+}
