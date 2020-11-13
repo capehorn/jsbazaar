@@ -13,14 +13,30 @@ function rZ(deg) {return ` rotateZ(${deg}deg)`;}
 
 const origo = document.querySelector("#origo");
 
-// const tetrahedron100 = newTetrahedron({edgeLength: 100});
-// const tetrahedron200 = newTetrahedron({edgeLength: 200});
-// origo.appendChild(tetrahedron100);
-// origo.appendChild(tetrahedron200);
+const tetrahedron100 = newTetrahedron({edgeLength: 100});
+const tetrahedron200 = newTetrahedron({edgeLength: 200});
+origo.appendChild(tetrahedron100);
+origo.appendChild(tetrahedron200);
 
-const cuboid = newCuboid({x: 100, y: 200});
-origo.appendChild(cuboid);
+// const cuboid = newCuboid({x: 100, y: 200});
+// origo.appendChild(cuboid);
 
+const $ = (function() {
+
+    const executor = {
+        putTo(what, where) {
+            console.log(this);
+        }
+    };
+
+
+    return {
+      execute(cmd) {
+          //console.log(cmd);
+          executor[cmd[1]](cmd[0], cmd[2]);
+      }
+    };
+})();
 
 
 function newCuboid({x = 100, y = 100, z = 100}) {
@@ -48,6 +64,9 @@ function newCuboid({x = 100, y = 100, z = 100}) {
     return ref;
 }
 
+const cmd = [tetrahedron100, "putTo", P(0, 0)];
+$.execute(cmd);
+
 function newTetrahedron({edgeLength = 100}) {
     const t1 = triangle({a: edgeLength});
     const face1 = toFace(t1);
@@ -62,7 +81,7 @@ function newTetrahedron({edgeLength = 100}) {
 
     face3.el.style.transformOrigin = "top center";
     face3.el.style.transform = trfs(rY(240), rX(angleAtTop));
-    const ref = newRef({transformOrigin: "100px 100px"});
+    const ref = newRef("tetrahedron", {transformOrigin: "100px 100px"});
     addFaces(ref, face1, face2, face3);
     return ref;
 }
@@ -162,8 +181,9 @@ function calcRotation(dx, dy) {
 } 
 
 
-function newRef({transformOrigin = "center center"}) {
+function newRef(shapeType, {transformOrigin = "center center"}) {
     const el = document.createElement("div");
+    el.dataset.shapeType = shapeType;
     el.classList.add("ref");
     el.style.transformOrigin = transformOrigin;
     return el;
@@ -173,13 +193,13 @@ function addFaces(ref, ...faces) {
     faces.forEach(f => ref.appendChild(f.el));
 }
 
-// tetrahedron.animate([
-//     // keyframes
-//     { transform: "rotateZ(0deg)" }, 
-//     { transform: 'rotateZ(360deg) rotateY(-720deg)' }
-//   ], { 
-//     // timing options
-//     duration: 3000,
-//     iterations: Infinity,
-//       composite: 'add'
-//   });
+tetrahedron100.animate([
+    // keyframes
+    { transform: "rotateY(0deg)" }, 
+    { transform: 'rotateY(360deg)' }
+  ], { 
+    // timing options
+    duration: 10000,
+    iterations: Infinity,
+      composite: 'add'
+  });
