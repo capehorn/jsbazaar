@@ -1,5 +1,6 @@
 const LINE_DELTA = 0.0001;
 
+function P(x, y, z, w) {return new DOMPoint(x, y, z, w);}
 function px(v) {return `${v}px`;}
 function trfs(...trfs) {return trfs.join(" ");}
 function tX(x) {return ` translateX(${x})`;}
@@ -10,52 +11,73 @@ function rX(deg) {return ` rotateX(${deg}deg)`;}
 function rY(deg) {return ` rotateY(${deg}deg)`;}
 function rZ(deg) {return ` rotateZ(${deg}deg)`;}
 
-const tetrahedron = {
-    faces: [
-        [
-            0, -100, 0,
-            100, 0, 0,
-            100, 100, 0,
-        ]
-    ]
+const origo = document.querySelector("#origo");
+
+// const tetrahedron100 = newTetrahedron({edgeLength: 100});
+// const tetrahedron200 = newTetrahedron({edgeLength: 200});
+// origo.appendChild(tetrahedron100);
+// origo.appendChild(tetrahedron200);
+
+const cuboid = newCuboid({x: 100, y: 200});
+origo.appendChild(cuboid);
+
+
+
+function newCuboid({x = 100, y = 100, z = 100}) {
+    const bottom = toFace([P(0, 0), P(x, 0), P(x, y), P(0, y)]);
+    bottom.el.style.transform = trfs(t3d(-1/2*x, 1/2*(y - z), 0), rX(-90));
+
+    const top = toFace([P(0, 0), P(x, 0), P(x, y), P(0, y)]);
+    top.el.style.transform = trfs(t3d(-1/2*x, 1/2*(y + z), 0), rX(-90));
+
+    // const back = toFace([P(0, 0), P(x, 0), P(x, y), P(0, y)]);
+    // back.el.style.transform = trfs(t3d(-1/2*x, 1/2*(y + z), 0), rX(-90));
+    // const face1 = toFace(t1);
+    // const face2 = toFace(t1);
+    // const face3 = toFace(t1);
+    //rect1.el.style.transformOrigin = "top center";
+    //rect1.el.style.transform = rX(angleAtTop);
+
+    // face2.el.style.transformOrigin = "top center";
+    // face2.el.style.transform = trfs(rY(120), rX(angleAtTop));
+
+    // face3.el.style.transformOrigin = "top center";
+    // face3.el.style.transform = trfs(rY(240), rX(angleAtTop));
+    const ref = newRef({transformOrigin: "100px 100px"});
+    addFaces(ref, bottom, top);
+    return ref;
 }
 
-const origo = document.querySelector("#origo");
-const frag = document.createDocumentFragment();
-const t1 = triangle();
-//const t2 = cloneFace(t1);
+function newTetrahedron({edgeLength = 100}) {
+    const t1 = triangle({a: edgeLength});
+    const face1 = toFace(t1);
+    const face2 = toFace(t1);
+    const face3 = toFace(t1);
+    const angleAtTop = 90 - 70.53;
+    face1.el.style.transformOrigin = "top center";
+    face1.el.style.transform = rX(angleAtTop);
 
+    face2.el.style.transformOrigin = "top center";
+    face2.el.style.transform = trfs(rY(120), rX(angleAtTop));
 
-const ref = newRef("-100px", "-100px");
+    face3.el.style.transformOrigin = "top center";
+    face3.el.style.transform = trfs(rY(240), rX(angleAtTop));
+    const ref = newRef({transformOrigin: "100px 100px"});
+    addFaces(ref, face1, face2, face3);
+    return ref;
+}
 
-const face1 = toFace(t1);
-const face2 = toFace(t1);
-const face3 = toFace(t1);
-face1.el.style.transformOrigin = "top center";
-face1.el.style.transform = rX(90 - 70.53);
-
-face2.el.style.transformOrigin = "top center";
-face2.el.style.transform = trfs(rY(120), rX(90 - 70.53));
-
-face3.el.style.transformOrigin = "top center";
-face3.el.style.transform = trfs(rY(240), rX(90 - 70.53));
-
-addFaces(ref, face1, face2, face3);
-
-
-origo.appendChild(ref);
-
-function triangle() {
-    const m = new DOMMatrix().setMatrixValue(tY(-100));
+function triangle({a, b = null, c = null}) {
+    const m = new DOMMatrix().setMatrixValue(tY(-1*a));
     const p1 = new DOMPoint().matrixTransform(m);
     const p2 = p1.matrixTransform(m.setMatrixValue(rZ(120)));
     const p3 = p2.matrixTransform(m);
     return [p1, p2, p3];
 }
 
-function toFace(ps) {
+function toFace(ps, useClipPath = true) {
     const {points, min, max} = normalize(ps);
-    const clipPath = buildClipPath(points);
+    const clipPath = useClipPath ? buildClipPath(points) : null;
     const el = toElem(max.x - min.x, max.y - min.y, clipPath);
     const edges = points.map( (p, idx, arr) => newEdge(p, idx === arr.length - 1 ? arr[0] : arr[idx+1]) );
     edges.forEach(e => el.appendChild(e));
@@ -94,13 +116,15 @@ function normalize(points) {
     };
 }
 
-function toElem(w, h, clipPath) {
+function toElem(w, h, clipPath = null) {
     const el = document.createElement("div");
     el.classList.add("face");
     const s = el.style;
     s.width = px(w);
     s.height = px(h);
-    s.clipPath = clipPath;
+    if (clipPath != null) {
+        s.clipPath = clipPath;
+    }
     return el;
 }
 
@@ -138,11 +162,10 @@ function calcRotation(dx, dy) {
 } 
 
 
-function newRef(top, left) {
+function newRef({transformOrigin = "center center"}) {
     const el = document.createElement("div");
     el.classList.add("ref");
-    el.style.top = top;
-    el.style.left = left;
+    el.style.transformOrigin = transformOrigin;
     return el;
 }
 
@@ -150,13 +173,13 @@ function addFaces(ref, ...faces) {
     faces.forEach(f => ref.appendChild(f.el));
 }
 
-ref.animate([
-    // keyframes
-    { transform: "rotateZ(0deg)" }, 
-    { transform: 'rotateZ(360deg) rotateY(-720deg)' }
-  ], { 
-    // timing options
-    duration: 10000,
-    iterations: Infinity,
-      composite: 'add'
-  });
+// tetrahedron.animate([
+//     // keyframes
+//     { transform: "rotateZ(0deg)" }, 
+//     { transform: 'rotateZ(360deg) rotateY(-720deg)' }
+//   ], { 
+//     // timing options
+//     duration: 3000,
+//     iterations: Infinity,
+//       composite: 'add'
+//   });
