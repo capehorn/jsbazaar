@@ -32,8 +32,13 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: max-content;
-    height: max-content;
+    width: 1px;
+    height: 1px;
+    /*width: 200px;
+    height: 200px;
+    border: 1px solid red;
+    background-color: rgba(188, 143, 143, 0.37);*/
+    /*transform: rotateY(90deg);*/
 }
 
 .face {
